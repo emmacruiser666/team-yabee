@@ -17,12 +17,18 @@ box-sizing:border-box;
 font-family:"Helvetica Neue",Inter,Arial,sans-serif;
 }
 
+html{
+height:100%;
+}
+
 body{
 background:var(--bg);
 color:var(--text);
 font-weight:400;
 letter-spacing:.055em;
 text-transform:uppercase;
+height:100%;
+overflow:hidden;
 }
 
 h1,
@@ -57,13 +63,37 @@ outline-offset:2px;
 .app{
 display:grid;
 grid-template-columns:280px 1fr;
-min-height:100vh;
+height:100%;
+max-height:100%;
+min-height:0;
+overflow:hidden;
 }
 
 .sidebar{
 background:#fbfbfa;
 padding:34px 28px;
 border-right:1px solid var(--line);
+display:flex;
+flex-direction:column;
+min-height:0;
+height:100%;
+overflow-x:hidden;
+overflow-y:auto;
+}
+
+.sidebar-bottom{
+margin-top:auto;
+flex-shrink:0;
+}
+
+.sidebar-version{
+font-size:10px;
+color:var(--muted);
+letter-spacing:0.1em;
+padding-top:10px;
+margin:0;
+font-weight:400;
+text-transform:none;
 }
 
 .brand{
@@ -143,6 +173,9 @@ border-bottom-color:var(--primary);
 
 .main{
 padding:42px;
+min-height:0;
+overflow-y:auto;
+-webkit-overflow-scrolling:touch;
 }
 
 .top{
@@ -730,8 +763,17 @@ textarea,
 }
 
 @media(max-width:900px){
-.app{grid-template-columns:1fr;}
-.sidebar{border-right:none;border-bottom:1px solid var(--line);padding:28px;}
+.app{
+grid-template-columns:1fr;
+grid-template-rows:auto minmax(0,1fr);
+}
+.sidebar{
+border-right:none;
+border-bottom:1px solid var(--line);
+padding:28px;
+height:auto;
+max-height:none;
+}
 .main{padding:32px 24px;}
 .nav{flex-direction:row;overflow:auto; flex-wrap:wrap;}
 }
