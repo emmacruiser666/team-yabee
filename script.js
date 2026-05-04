@@ -71,6 +71,21 @@ function uid(){
     return Date.now() + Math.random().toString(16).slice(2);
 }
 
+/** Leading digits of pet id (from uid) ≈ creation time; larger = newer. */
+function petNewestKey(p) {
+    const id = String(p.id ?? "");
+    const m = id.match(/^\d+/);
+    return m ? parseInt(m[0], 10) : 0;
+}
+
+function sortPetsNewestFirst(list) {
+    return list.slice().sort((a, b) => {
+        const diff = petNewestKey(b) - petNewestKey(a);
+        if (diff !== 0) return diff;
+        return String(b.id).localeCompare(String(a.id), undefined, { numeric: true });
+    });
+}
+
 function getFullDateTime() {
     const now = new Date();
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
@@ -147,32 +162,6 @@ function getLatestServiceTimestamp(p){
         return p.history[p.history.length - 1]?.date || "";
     }
     return p.history[p.history.length - 1]?.date || "";
-}
-
-function parseHistoryDateToMs(dateStr) {
-    if (!dateStr) return 0;
-    const s = String(dateStr).trim();
-    if (s.includes(" · ")) {
-        const [datePart, timePart] = s.split(" · ").map((x) => x.trim());
-        const d = new Date(`${datePart} ${timePart}`);
-        if (!isNaN(d.getTime())) return d.getTime();
-    }
-    const d = new Date(s);
-    return isNaN(d.getTime()) ? 0 : d.getTime();
-}
-
-function getPetSortRankMs(p) {
-    if (!p || !Array.isArray(p.history) || !p.history.length) return 0;
-    let max = 0;
-    for (const h of p.history) {
-        const t = parseHistoryDateToMs(h.date);
-        if (t > max) max = t;
-    }
-    return max;
-}
-
-function sortPetsRecentFirst(a, b) {
-    return getPetSortRankMs(b) - getPetSortRankMs(a) || String(b.id).localeCompare(String(a.id));
 }
 
 function formatBadgeTimestamp(ts){
@@ -421,20 +410,17 @@ ${(!isMultiple && p.package) ? `<span class="tag">${p.package}</span>` : ""}
 
 function renderPets(){ 
 let q = petSearch.value.toLowerCase().trim();
-let arr = db.pets.filter(p => !q || [p.name, p.breed, p.gender, p.currentService || "", p.package || "", p.sharing || "", p.phone || ""].join(" ").toLowerCase().includes(q));
-arr.sort(sortPetsRecentFirst);
+let arr = sortPetsNewestFirst(db.pets.filter(p => !q || [p.name, p.breed, p.gender, p.currentService || "", p.package || "", p.sharing || "", p.phone || ""].join(" ").toLowerCase().includes(q)));
 petsList.innerHTML = arr.map(petCard).join("") || `<div class="empty">No pets found.</div>`;
 }
 function renderGroom(){
 let q = groomSearch.value.toLowerCase().trim();
-let arr = db.pets.filter(p => p.currentService === "Grooming" && (!q || [p.name, p.breed, p.gender, p.package || "", p.phone || ""].join(" ").toLowerCase().includes(q)));
-arr.sort(sortPetsRecentFirst);
+let arr = sortPetsNewestFirst(db.pets.filter(p => p.currentService === "Grooming" && (!q || [p.name, p.breed, p.gender, p.package || "", p.phone || ""].join(" ").toLowerCase().includes(q))));
 groomList.innerHTML = arr.map(petCard).join("") || `<div class="empty">No grooming pets.</div>`;
 }
 function renderHotel(){
 let q = hotelSearch.value.toLowerCase().trim();
-let arr = db.pets.filter(p => p.currentService === "Hotel" && (!q || [p.name, p.breed, p.gender, p.sharing || "", p.package || "", p.phone || ""].join(" ").toLowerCase().includes(q)));
-arr.sort(sortPetsRecentFirst);
+let arr = sortPetsNewestFirst(db.pets.filter(p => p.currentService === "Hotel" && (!q || [p.name, p.breed, p.gender, p.sharing || "", p.package || "", p.phone || ""].join(" ").toLowerCase().includes(q))));
 hotelList.innerHTML = arr.map(petCard).join("") || `<div class="empty">No hotel pets.</div>`;
 }
 
@@ -627,7 +613,7 @@ let singlePet = {
 
 const checkInTime = getFullDateTime();
 
-db.pets.unshift({
+db.pets.push({
 id:uid(),
 name:singlePet.name,
 phone:h2.value || "N/A",
@@ -683,7 +669,7 @@ const groupId = uid();
 const bookingPets = getModePetSnapshot(pets);
 const checkInTime = getFullDateTime();
 
-db.pets.unshift({
+db.pets.push({
 id:uid(),
 name:formatMultiValue(pets, "name", "Unnamed"),
 phone:mhPhone.value || "N/A",
@@ -984,7 +970,7 @@ let singlePet = {
     type:g4.value,
     package:g6.value
 };
-db.pets.unshift({
+db.pets.push({
 id:uid(),
 name:singlePet.name,
 phone:g2.value || "N/A",
@@ -1031,7 +1017,7 @@ if (!pets.length) { alert("Please add at least one pet."); return; }
 const groupId = uid();
 const bookingPets = getModePetSnapshot(pets);
 
-db.pets.unshift({
+db.pets.push({
 id:uid(),
 name:formatMultiValue(pets, "name", "Unnamed"),
 phone:mgPhone.value || "N/A",
