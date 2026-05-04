@@ -71,17 +71,70 @@ function uid(){
     return Date.now() + Math.random().toString(16).slice(2);
 }
 
-/** Leading digits of pet id (from uid) ≈ creation time; larger = newer. */
-function petNewestKey(p) {
-    const id = String(p.id ?? "");
-    const m = id.match(/^\d+/);
+/** Local midnight ms for the calendar day in a display date (time-of-day ignored). */
+function parseDisplayDateToLocalDayStartMs(dateStr) {
+    if (!dateStr || typeof dateStr !== "string") return 0;
+    const trimmed = dateStr.trim();
+    if (!trimmed || /^TBD$/i.test(trimmed)) return 0;
+
+    let datePart = trimmed;
+    if (trimmed.includes("·")) {
+        datePart = trimmed.split(" · ")[0].trim();
+    }
+
+    const mdy = datePart.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (mdy) {
+        const mm = parseInt(mdy[1], 10);
+        const dd = parseInt(mdy[2], 10);
+        const yyyy = parseInt(mdy[3], 10);
+        if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31 && yyyy >= 1900)
+            return new Date(yyyy, mm - 1, dd).getTime();
+    }
+
+    if (/^\d{4}[/-]\d{2}[/-]\d{2}$/.test(datePart)) {
+        const [y, mo, da] = datePart.split(/[/-]/).map((n) => parseInt(n, 10));
+        if (y && mo && da) return new Date(y, mo - 1, da).getTime();
+    }
+
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime()))
+        return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()).getTime();
+
+    return 0;
+}
+
+/** Newest calendar day from service-relevant + all history dates (not clock time). */
+function petSortDayEpochMs(p) {
+    if (!p) return 0;
+    let maxDay = 0;
+    const consider = (s) => {
+        const ms = parseDisplayDateToLocalDayStartMs(s || "");
+        if (ms > maxDay) maxDay = ms;
+    };
+    consider(getLatestServiceTimestamp(p));
+    if (Array.isArray(p.history)) {
+        for (const h of p.history) consider(h?.date);
+    }
+    return maxDay;
+}
+
+function petIdFallbackNumber(p) {
+    const m = String(p.id ?? "").match(/^\d+/);
     return m ? parseInt(m[0], 10) : 0;
 }
 
 function sortPetsNewestFirst(list) {
     return list.slice().sort((a, b) => {
-        const diff = petNewestKey(b) - petNewestKey(a);
-        if (diff !== 0) return diff;
+        const da = petSortDayEpochMs(a);
+        const db = petSortDayEpochMs(b);
+        if (da !== db) return db - da;
+        if (da === 0 && db === 0) {
+            const ia = petIdFallbackNumber(a);
+            const ib = petIdFallbackNumber(b);
+            if (ia !== ib) return ib - ia;
+        }
+        const nameCmp = String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" });
+        if (nameCmp !== 0) return nameCmp;
         return String(b.id).localeCompare(String(a.id), undefined, { numeric: true });
     });
 }
