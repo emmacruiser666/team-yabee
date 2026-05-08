@@ -1,5 +1,8 @@
+const APP_VERSION = document.querySelector('meta[name="app-version"]')?.content?.trim() || "0.0";
+const VERSION_CHECK_INTERVAL = 10 * 60 * 1000;
 let autoSaveInterval;
 let saveNotificationTimer;
+let updateCheckInterval;
 let appReadyForSaveNotifications = false;
 
 function getBackupFilename(prefix) {
@@ -42,6 +45,97 @@ function showSaveNotification(text = "Auto-saved") {
     clearTimeout(saveNotificationTimer);
     saveNotificationTimer = setTimeout(() => notif.style.display = "none", 2500);
 }
+
+function compareVersions(a, b) {
+    const left = String(a || "").trim().split(".").map((part) => parseInt(part, 10) || 0);
+    const right = String(b || "").trim().split(".").map((part) => parseInt(part, 10) || 0);
+    const length = Math.max(left.length, right.length);
+    for (let i = 0; i < length; i++) {
+        const diff = (left[i] || 0) - (right[i] || 0);
+        if (diff !== 0) return diff;
+    }
+    return 0;
+}
+
+function setUpdateStatus(message, tone = "") {
+    const statusEl = document.getElementById("updateStatus");
+    if (!statusEl) return;
+    if (!message) {
+        statusEl.hidden = true;
+        statusEl.textContent = "";
+        statusEl.className = "update-status";
+        statusEl.innerHTML = "";
+        return;
+    }
+    statusEl.hidden = false;
+    statusEl.textContent = message;
+    statusEl.className = "update-status " + tone;
+}
+
+function syncSidebarVersion() {
+    const versionEl = document.getElementById("sidebarVersion");
+    if (!versionEl) return;
+    versionEl.textContent = "Version " + APP_VERSION;
+}
+
+function showUpdateAction(remoteVersion) {
+    const statusEl = document.getElementById("updateStatus");
+    if (!statusEl) return;
+    statusEl.hidden = false;
+    statusEl.className = "update-status yellow";
+    statusEl.innerHTML = `
+        <div class="update-copy">New version ${remoteVersion} available</div>
+        <button class="update-action" type="button" onclick="reloadAppForUpdate()">Update now</button>
+    `;
+}
+
+function reloadAppForUpdate() {
+    location.reload();
+}
+
+async function checkForAppUpdate() {
+    const currentVersion = APP_VERSION;
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.set("__versionCheck", String(Date.now()));
+
+    try {
+        const res = await fetch(currentUrl.toString(), { cache: "no-store" });
+        if (!res.ok) return;
+
+        const html = await res.text();
+        const lines = html.split("\n");
+        const metaLine = lines.find((line) => line.includes('name="app-version"'));
+        const versionLine = metaLine || lines.find((line) => line.includes('class="sidebar-version"'));
+        if (!versionLine) return;
+
+        let remoteVersion = "";
+        if (versionLine.includes('name="app-version"')) {
+            const parts = versionLine.split('content="');
+            remoteVersion = parts[1] ? parts[1].split('"')[0].trim() : "";
+        } else {
+            const parts = versionLine.split(">Version ");
+            remoteVersion = parts[1] ? parts[1].split("<")[0].trim() : "";
+        }
+
+        if (!remoteVersion) return;
+        if (compareVersions(remoteVersion, currentVersion) > 0) {
+            showUpdateAction(remoteVersion);
+        }
+    } catch {
+        return;
+    }
+}
+function startUpdateWatcher() {
+    checkForAppUpdate();
+    if (updateCheckInterval) clearInterval(updateCheckInterval);
+    updateCheckInterval = setInterval(checkForAppUpdate, VERSION_CHECK_INTERVAL);
+
+    window.addEventListener("focus", checkForAppUpdate);
+    document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) checkForAppUpdate();
+    });
+}
+
 
 function autoSaveToFile() {
     saveDB();
@@ -1138,7 +1232,9 @@ petSearch.oninput = renderPets;
 groomSearch.oninput = renderGroom;
 hotelSearch.oninput = renderHotel;
 
+startUpdateWatcher();
 startAutoSave();
+syncSidebarVersion();
 render();
 updateBackupStatus();
 appReadyForSaveNotifications = true;
