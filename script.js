@@ -407,6 +407,93 @@ function getCheckoutDateOnly(dateStr) {
     return dateStr || "TBD";
 }
 
+function getHotelCheckoutInfo(p) {
+    if (!p || p.currentService !== "Hotel" || !Array.isArray(p.history)) return null;
+    for (let i = p.history.length - 1; i >= 0; i--) {
+        const h = p.history[i];
+        if (!h?.service || !String(h.service).startsWith("Hotel Check-out - ")) continue;
+        const dateMs = parseDisplayDateToLocalDayStartMs(h.date || "");
+        if (!dateMs) continue;
+        return {
+            date: h.date || "",
+            dateMs,
+            package: String(h.service).replace("Hotel Check-out - ", "").trim() || "No Package"
+        };
+    }
+    return null;
+}
+
+function formatReminderDate(dateMs) {
+    const d = new Date(dateMs);
+    const month = d.getMonth() + 1;
+    const day = d.getDate();
+    const year = String(d.getFullYear()).slice(-2);
+    return `${month}/${day}/${year}`;
+}
+
+function formatCheckoutCountdown(dateMs) {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const diffDays = Math.round((dateMs - todayStart) / (1000 * 60 * 60 * 24));
+    if (diffDays < 0) return `Check-out overdue by ${Math.abs(diffDays)} day${Math.abs(diffDays) === 1 ? "" : "s"}`;
+    if (diffDays === 0) return "Check-out today";
+    if (diffDays === 1) return "Check-out in 1 day";
+    return `Check-out in ${diffDays} days`;
+}
+
+function openCheckoutReminder(id) {
+    closeModal();
+    setActiveSection("hotel");
+    setTimeout(() => viewPet(id), 10);
+}
+
+window.openCheckoutReminder = openCheckoutReminder;
+
+function renderCheckoutReminders() {
+    const container = document.getElementById("dashboardCheckoutReminders");
+    if (!container) return;
+
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+    const reminders = db.pets
+        .map((p) => {
+            const checkout = getHotelCheckoutInfo(p);
+            return checkout ? { pet: p, checkout } : null;
+        })
+        .filter(Boolean)
+        .filter(({ checkout }) => checkout.dateMs >= todayStart)
+        .sort((a, b) => a.checkout.dateMs - b.checkout.dateMs)
+        .slice(0, 8);
+
+    if (!reminders.length) {
+        container.innerHTML = "";
+        return;
+    }
+
+    container.innerHTML = `
+    <div class="card reminder-panel">
+        <div class="reminder-header">
+            <div class="reminder-title">HOTEL CHECK-OUT REMINDERS</div>
+            <div class="reminder-count">${reminders.length} UPCOMING</div>
+        </div>
+        <div class="reminder-list">
+            ${reminders.map(({ pet, checkout }) => `
+                <button class="reminder-item" type="button" onclick="openCheckoutReminder('${pet.id}')">
+                    <div>
+                        <div class="reminder-name">${pet.name || "Unnamed"}</div>
+                        <div class="reminder-meta">
+                            Check-out on ${formatReminderDate(checkout.dateMs)}<br>
+                            Package: ${checkout.package}
+                        </div>
+                    </div>
+                    <div class="reminder-countdown">${formatCheckoutCountdown(checkout.dateMs)}</div>
+                </button>
+            `).join("")}
+        </div>
+    </div>
+    `;
+}
+
 function getPackageOptions(selected = "") {
     return ["N/A","Sham-paw","Shorty Coat Paws","VIPAWS","Giant Poodles","Premium Wash","Premium Wash Cats","Catlux","Other"]
         .map(pkg => `<option ${selected === pkg ? "selected" : ""}>${pkg}</option>`)
@@ -557,6 +644,7 @@ const groomTodayEl = document.getElementById("statGroomToday");
 const hotelTodayEl = document.getElementById("statHotelToday");
 if (groomTodayEl) groomTodayEl.textContent = db.pets.filter(p => p.currentService==="Grooming" && isToday(getLatestServiceTimestamp(p))).length;
 if (hotelTodayEl) hotelTodayEl.textContent = db.pets.filter(p => p.currentService==="Hotel" && isToday(getLatestServiceTimestamp(p))).length;
+renderCheckoutReminders();
 renderPets();
 renderGroom();
 renderHotel();
